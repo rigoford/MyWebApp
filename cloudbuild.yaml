@@ -1,0 +1,47 @@
+steps:
+#   Build and test application
+  - name: maven:3.8.6-eclipse-temurin-11
+    entrypoint: mvn
+    args: [ 'test' ]
+
+# Run code smells scan, e.g. with SonarQube
+
+# Run SAST scan of dependencies, e.g. with Snyk or Nexus IQ
+
+#   Package application without testing
+  - name: maven:3.8.6-eclipse-temurin-11
+    entrypoint: mvn
+    args: [ 'package', '-Dmaven.test.skip=true' ]
+
+#   Create docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '-t', 'europe-west2-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/myapp:$SHORT_SHA', '.' ]
+
+#   Login to Docker Hub
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: [ '-c', 'docker login --username=$$DOCKER_USERNAME --password=$$DOCKER_PASSWORD' ]
+    secretEnv: [ 'DOCKER_USERNAME', 'DOCKER_PASSWORD' ]
+
+  #   Login to Snyk
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: [ '-c', 'docker scan --login --token=$$SNYK_AUTH_TOKEN --accept-license' ]
+    secretEnv: [ 'SNYK_API_TOKEN' ]
+
+#   Run a SAST scan of the docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'scan', '--accept-license', 'europe-west2-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/myapp:$SHORT_SHA']
+
+# Push the docker image to Artifact Registry
+images:
+  - 'europe-west2-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/myapp:$SHORT_SHA'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/766932197888/secrets/docker-username/versions/1
+      env: 'DOCKER_USERNAME'
+    - versionName: projects/766932197888/secrets/docker-password/versions/1
+      env: 'DOCKER_PASSWORD'
+    - versionName: projects/766932197888/secrets/snyk-api-token/versions/1
+      env: 'SNYK_API_TOKEN'
